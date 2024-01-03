@@ -1,0 +1,32 @@
+{
+    "name": "wemx/quantum",
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "license": "MIT",
+    "type": "library",
+    "authors": [
+        {
+            "name": "PadowYT2",
+            "email": "me@padow.ru",
+            "role": "Creator"
+        }
+    ],
+    "autoload": {
+        "psr-4": {
+            "Wemx\\Quantum\\": "src"
+        }
+    },
+    "require": {},
+    "config": {
+        "sort-packages": true
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Wemx\\Quantum\\CommandsServiceProvider"
+            ],
+            "aliases": {}
+        }
+    },
+    "scripts": {}
+}
