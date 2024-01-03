@@ -61,8 +61,15 @@ class QuantumInstaller extends Command
         }
 
         shell_exec("curl -s -L -o quantum.zip {$response['download_url']}");
-        shell_exec("unzip -o quantum.zip -d quantum");
+        shell_exec("unzip -o quantum.zip");
         shell_exec("rm -rf quantum.zip");
+
+        $this->info('Migrating database');
+        shell_exec('php artisan migrate --force');
+        shell_exec('php artisan view:clear && php artisan config:clear');
+
+        $this->info("Building Assets (This can take a few minutes)");
+        shell_exec('yarn && yarn build:production');
 
         $this->info('Installation Complete');
     }
