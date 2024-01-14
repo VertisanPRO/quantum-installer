@@ -4,6 +4,7 @@ namespace Wemx\Quantum;
 
 use Illuminate\Support\ServiceProvider;
 use Wemx\Quantum\Commands\QuantumInstaller;
+use Wemx\Quantum\Commands\QuantumUninstaller;
 
 class CommandsServiceProvider extends ServiceProvider
 {
@@ -11,6 +12,7 @@ class CommandsServiceProvider extends ServiceProvider
     {
         $this->commands([
             QuantumInstaller::class,
+            QuantumUninstaller::class,
         ]);
     }
 
