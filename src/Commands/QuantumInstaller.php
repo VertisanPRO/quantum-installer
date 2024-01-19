@@ -2,14 +2,16 @@
 
 namespace Wemx\Quantum\Commands;
 
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
+use function Laravel\Prompts\{progress, text, select, confirm, info, warning, spin, error};
 
 class QuantumInstaller extends Command
 {
     protected $description = 'Install Quantum';
 
-    protected $signature = 'quantum:install {license_key?}';
+    protected $signature = 'quantum:install {license_key?} {--force}';
 
     public function __construct()
     {
@@ -18,60 +20,175 @@ class QuantumInstaller extends Command
 
     public function handle()
     {
-        $this->info("
+        info("
         ======================================
         |||         Quantum © 2024         |||
         |||         By VertisanPRO         |||
         ======================================
         ");
 
-        if (!$this->confirm('Quantum is in early stage, it is unrecommended to use in production, do you wish to continue?', false)) {
-            $this->info('Installation has been cancelled.');
-            exit;
+        $who = exec('whoami');
+        if (isset($who) and $who !== "root") {
+            error('
+                We have detected that you are not logged in as a root user.
+                To run the installer, it is recommended to login as root user.
+                If you are not logged in as root, some processes may fail to setup
+                To login as the root user, please type the following command: su -
+                and proceed to re-run the installer.
+                Alternatively you can contact your provider for the root login for your machine.
+            ');
+
+            $confirm = confirm(
+                label: 'Do you wish to continue?',
+                default: false,
+            );
+
+            if (!$confirm) {
+                warning('Installation has been cancelled');
+                exit;
+            }
         }
 
-        $this->sshUser();
+        $license_key = $this->argument('license_key') ?? text(
+            label: 'Please enter your license key',
+            required: true,
+        );
 
-        $license_key = $this->argument('license_key') ?? $this->ask("Please enter your license key", 'cancel');
         $domain = $this->getDomain();
 
-        $this->info('Attempting to connect...');
-
-        $response = Http::post('https://proxied.host/api/v1/licenses/public/download', [
-            'packages' => 'Quantum',
-            'license' => $license_key,
-            'domain' => $domain,
-            'resource_name' => 'quantum',
-        ]);
+        $response = spin(
+            fn() => Http::post('https://proxied.host/api/v1/licenses/public/download', [
+                'packages' => 'Quantum',
+                'license' => $license_key,
+                'domain' => $domain,
+                'resource_name' => 'quantum',
+            ]),
+            'Attempting to connect...'
+        );
 
         if (isset($response['success']) and !$response['success']) {
-            $this->newLine();
+            foreach ($response['errors'] as $error)
+                error($error[0]);
 
-            foreach ($response['errors'] as $error) {
-                $this->error($error[0]);
-                $this->newLine();
-            }
-
-            exit;
+            return;
         }
 
         if (!isset($response['success']) or !isset($response['download_url'])) {
-            $this->error('Something went wrong, please try again later.');
-            exit;
+            error('Something went wrong, please try again later.');
+            return;
         }
 
-        shell_exec("curl -s -L -o quantum.zip {$response['download_url']}");
-        shell_exec("unzip -o quantum.zip");
-        shell_exec("rm -rf quantum.zip");
+        $userDetails = posix_getpwuid(fileowner('public'));
+        $user = $userDetails['name'] ?? 'www-data';
 
-        $this->info('Migrating database');
-        shell_exec('php artisan migrate --force');
-        shell_exec('php artisan view:clear && php artisan config:clear');
+        $confirm = confirm(
+            label: "Your webserver user has been detected as <fg=green>[{$user}]:</> is this correct?",
+            default: true,
+        );
 
-        $this->info("Building Assets (This can take a few minutes)");
-        shell_exec('yarn && yarn build:production');
+        if (!$confirm) {
+            $user = select(
+                label: 'Please enter the name of the user running your webserver process. This varies from system to system, but is generally "www-data", "nginx", or "apache".',
+                options: [
+                    'www-data' => 'www-data',
+                    'nginx' => 'nginx',
+                    'apache' => 'apache',
+                    'own' => 'Your own user (type after you choose this)'
+                ],
+                default: 'www-data'
+            );
 
-        $this->info('Installation Complete');
+            if ($user === 'own')
+                $user = text('Please enter the name of the user running your webserver process');
+        }
+
+        $groupDetails = posix_getgrgid(filegroup('public'));
+        $group = $groupDetails['name'] ?? 'www-data';
+
+        $confirm = confirm(
+            label: "Your webserver group has been detected as <fg=green>[{$group}]:</> is this correct?",
+            default: true,
+        );
+
+        if (!$confirm) {
+            $user = select(
+                label: 'Please enter the name of the group running your webserver process. Normally this is the same as your user.',
+                options: [
+                    'www-data' => 'www-data',
+                    'nginx' => 'nginx',
+                    'apache' => 'apache',
+                    'own' => 'Your own group (type after you choose this)'
+                ],
+                default: 'www-data'
+            );
+
+            if ($user === 'own')
+                $user = text('Please enter the name of the group running your webserver process');
+        }
+
+        if (!$this->option('force')) {
+            $confirm = confirm(
+                label: 'Quantum is in alpha stage, it is unrecommended to use in production, do you wish to continue?',
+                default: false,
+            );
+
+            if (!$confirm) {
+                warning('Installation has been cancelled');
+                return;
+            }
+        }
+
+        $progress = progress(label: 'Installing Quantum', steps: 6);
+        $progress->start();
+
+        spin(
+            function ($response) {
+                exec("curl -s -L -o quantum.zip {$response['download_url']}");
+                exec("unzip -o quantum.zip");
+                exec("rm -rf quantum.zip");
+            },
+            'Downloading latest stable version for Pterodactyl'
+        );
+
+        $progress->advance();
+
+        spin(
+            fn() => exec('chmod -R 755 storage/* bootstrap/cache'),
+            'Setting correct permissions'
+        );
+
+        $progress->advance();
+
+        spin(
+            fn() => exec('php artisan view:clear && php artisan config:clear && php artisan optimize'),
+            'Clearing cache'
+        );
+
+        $progress->advance();
+
+        spin(
+            fn() => exec('php artisan migrate --force'),
+            'Migrating the database'
+        );
+
+        $progress->advance();
+
+        $basePath = base_path();
+        spin(
+            fn() => exec("chown -R {$user}:{$group} {$basePath}/*"),
+            'Setting correct permissions'
+        );
+
+        $progress->advance();
+
+        spin(
+            fn() => Artisan::call('quantum:build --no-copyright'),
+            'Building Assets (This can take a few minutes)'
+        );
+
+        $progress->advance();
+
+        info('Installation Complete');
     }
 
     private function ip()
@@ -79,8 +196,7 @@ class QuantumInstaller extends Command
         $ipAddress = exec("curl -s ifconfig.me");
 
         if (!filter_var($ipAddress, FILTER_VALIDATE_IP)) {
-            $this->newLine(2);
-            $this->info("Failed to automatically retrieve IP Address");
+            error("Failed to automatically retrieve IP Address");
             $ipAddress = $this->ask("Please enter this machines IP Address");
         }
 
@@ -92,36 +208,13 @@ class QuantumInstaller extends Command
         return ($this->option($key)) ? $this->option($key) : $default;
     }
 
-    private function sshUser()
-    {
-        $SshUser = exec('whoami');
-        if (isset($SshUser) and $SshUser !== "root") {
-            $this->error('
-      We have detected that you are not logged in as a root user.
-      To run the auto-quantum, it is recommended to login as root user.
-      If you are not logged in as root, some processes may fail to setup
-      To login as root SSH user, please type the following command: sudo su
-      and proceed to re-run the quantum.
-      alternatively you can contact your provider for ROOT user login for your machine.
-      ');
-
-            if ($this->confirm('Stop the installation?', true)) {
-                $this->info('Installation has been cancelled.');
-                exit;
-            }
-        }
-    }
-
     protected function getDomain()
     {
-        // check if config.appurl is a valid URL
         if (!filter_var(config('app.url'), FILTER_VALIDATE_URL)) {
-            $this->error("App URL is not a valid URL in your .env file, it should be of format http://domain.com or https://domain.com");
-            exit;
+            error("App URL is not a valid URL in your .env file, it should be of format http://domain.com or https://domain.com");
+            return;
         }
 
-        $domain = parse_url(config('app.url'), PHP_URL_HOST);
-
-        return $domain;
+        return parse_url(config('app.url'), PHP_URL_HOST);
     }
 }
