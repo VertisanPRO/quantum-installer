@@ -16,7 +16,9 @@
             "Wemx\\Quantum\\": "src"
         }
     },
-    "require": {},
+    "require": {
+        "laravel/prompts": "*"
+    },
     "config": {
         "sort-packages": true
     },

@@ -3,8 +3,7 @@
 namespace Wemx\Quantum\Commands;
 
 use Illuminate\Console\Command;
-use Symfony\Component\Process\Process;
-use Symfony\Component\Console\Helper\ProgressBar;
+use function Laravel\Prompts\{progress, text, select, confirm, info, warning, spin};
 
 class QuantumUninstaller extends Command
 {
@@ -19,150 +18,128 @@ class QuantumUninstaller extends Command
 
     public function handle()
     {
-        $this->info("
+        info('
         ======================================
         |||         Quantum © 2024         |||
         |||         By VertisanPRO         |||
         ======================================
-        ");
+        ');
 
-        if (!$this->option('force') && !$this->confirm('You are about to uninstall Quantum. This process will removes all third party changes and updates Pterodactyl to the latest available version. Are you sure you want to continue? ', false)) {
-            $this->info('Installation has been cancelled.');
-            exit;
+        $userDetails = posix_getpwuid(fileowner('public'));
+        $user = $userDetails['name'] ?? 'www-data';
+
+        $confirm = confirm(
+            label: "Your webserver user has been detected as <fg=green>[{$user}]:</> is this correct?",
+            default: true,
+        );
+
+        if (!$confirm) {
+            $user = select(
+                label: 'Please enter the name of the user running your webserver process. This varies from system to system, but is generally "www-data", "nginx", or "apache".',
+                options: [
+                    'www-data' => 'www-data',
+                    'nginx' => 'nginx',
+                    'apache' => 'apache',
+                    'own' => 'Your own user (type after you choose this)'
+                ],
+                default: 'www-data'
+            );
+
+            if ($user === 'own')
+                $user = text('Please enter the name of the user running your webserver process');
         }
 
-        $user = 'www-data';
-        $group = 'www-data';
-        if ($this->input->isInteractive()) {
-            if (is_null($this->option('user'))) {
-                $userDetails = posix_getpwuid(fileowner('public'));
-                $user = $userDetails['name'] ?? 'www-data';
+        $groupDetails = posix_getgrgid(filegroup('public'));
+        $group = $groupDetails['name'] ?? 'www-data';
 
-                if (!$this->confirm("Your webserver user has been detected as <fg=blue>[{$user}]:</> is this correct?", true)) {
-                    $user = $this->anticipate(
-                        'Please enter the name of the user running your webserver process. This varies from system to system, but is generally "www-data", "nginx", or "apache".',
-                        [
-                            'www-data',
-                            'nginx',
-                            'apache',
-                        ]
-                    );
-                }
-            }
+        $confirm = confirm(
+            label: "Your webserver group has been detected as <fg=green>[{$group}]:</> is this correct?",
+            default: true,
+        );
 
-            if (is_null($this->option('group'))) {
-                $groupDetails = posix_getgrgid(filegroup('public'));
-                $group = $groupDetails['name'] ?? 'www-data';
+        if (!$confirm) {
+            $user = select(
+                label: 'Please enter the name of the group running your webserver process. Normally this is the same as your user.',
+                options: [
+                    'www-data' => 'www-data',
+                    'nginx' => 'nginx',
+                    'apache' => 'apache',
+                    'own' => 'Your own group (type after you choose this)'
+                ],
+                default: 'www-data'
+            );
 
-                if (!$this->confirm("Your webserver group has been detected as <fg=blue>[{$group}]:</> is this correct?", true)) {
-                    $group = $this->anticipate(
-                        'Please enter the name of the group running your webserver process. Normally this is the same as your user.',
-                        [
-                            'www-data',
-                            'nginx',
-                            'apache',
-                        ]
-                    );
-                }
-            }
-
-            if (!$this->confirm('Are you sure you want to run the upgrade process for your Panel?')) {
-                $this->warn('Upgrade process terminated by user.');
-
-                return;
-            }
+            if ($user === 'own')
+                $user = text('Please enter the name of the group running your webserver process');
         }
 
-        ini_set('output_buffering', '0');
-        $bar = $this->output->createProgressBar(10);
-        $bar->start();
+        $confirm = confirm(
+            label: 'You are about to uninstall Quantum. This process will removes all third party changes and updates Pterodactyl to the latest available version. Are you sure you want to continue?',
+            default: false,
+        );
 
-        $this->withProgress($bar, function () {
-            $this->line("\$upgrader> curl -L \"{$this->getUrl()}\" | tar -xzv");
-            $process = Process::fromShellCommandline("curl -L \"{$this->getUrl()}\" | tar -xzv");
-            $process->run(function ($type, $buffer) {
-                $this->{$type === Process::ERR ? 'error' : 'line'}($buffer);
-            });
-        });
+        if (!$this->option('force') && !$confirm) {
+            warning('Uninstallation has been cancelled');
+            return;
+        }
 
-        $this->withProgress($bar, function () {
-            $this->line('$upgrader> php artisan down');
-            $this->call('down');
-        });
+        $progress = progress(label: 'Uninstalling Quantum', steps: 5);
+        $progress->start();
 
-        $this->withProgress($bar, function () {
-            $this->line('$upgrader> chmod -R 755 storage bootstrap/cache');
-            $process = new Process(['chmod', '-R', '755', 'storage', 'bootstrap/cache']);
-            $process->run(function ($type, $buffer) {
-                $this->{$type === Process::ERR ? 'error' : 'line'}($buffer);
-            });
-        });
+        spin(
+            fn() => exec('curl -s -L https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz | tar -xzv'),
+            'Downloading latest stable version for Pterodactyl'
+        );
 
-        $this->withProgress($bar, function () {
-            $command = ['composer', 'install', '--no-ansi'];
-            if (config('app.env') === 'production' && !config('app.debug')) {
-                $command[] = '--optimize-autoloader';
-                $command[] = '--no-dev';
-            }
 
-            $this->line('$upgrader> ' . implode(' ', $command));
-            $process = new Process($command);
-            $process->setTimeout(10 * 60);
-            $process->run(function ($type, $buffer) {
-                $this->line($buffer);
-            });
-        });
+        usleep(800);
 
-        /** @var \Illuminate\Foundation\Application $app */
-        $app = require __DIR__ . '/../../../bootstrap/app.php';
-        /** @var \Pterodactyl\Console\Kernel $kernel */
-        $kernel = $app->make(Kernel::class);
-        $kernel->bootstrap();
-        $this->setLaravel($app);
+        spin(
+            fn() => exec('chmod -R 755 storage/* bootstrap/cache'),
+            'Setting correct permissions'
+        );
 
-        $this->withProgress($bar, function () {
-            $this->line('$upgrader> php artisan view:clear');
-            $this->call('view:clear');
-        });
+        usleep(800);
+        $progress->advance();
 
-        $this->withProgress($bar, function () {
-            $this->line('$upgrader> php artisan config:clear');
-            $this->call('config:clear');
-        });
+        spin(
+            fn() => exec('php artisan view:clear && php artisan config:clear'),
+            'Clearing cache'
+        );
 
-        $this->withProgress($bar, function () {
-            $this->line('$upgrader> php artisan migrate --force --seed');
-            $this->call('migrate', ['--force' => true, '--seed' => true]);
-        });
+        usleep(800);
+        $progress->advance();
 
-        $this->withProgress($bar, function () use ($user, $group) {
-            $this->line("\$upgrader> chown -R {$user}:{$group} *");
-            $process = Process::fromShellCommandline("chown -R {$user}:{$group} *", $this->getLaravel()->basePath());
-            $process->setTimeout(10 * 60);
-            $process->run(function ($type, $buffer) {
-                $this->{$type === Process::ERR ? 'error' : 'line'}($buffer);
-            });
-        });
+        spin(
+            fn() => exec('composer install --no-dev --optimize-autoloader -n -q'),
+            'Installing composer dependencies'
+        );
 
-        $this->withProgress($bar, function () {
-            $this->line('$upgrader> php artisan queue:restart');
-            $this->call('queue:restart');
-        });
+        $progress->advance();
 
-        $this->withProgress($bar, function () {
-            $this->line('$upgrader> php artisan up');
-            $this->call('up');
-        });
+        spin(
+            fn() => exec('php artisan migrate --force'),
+            'Migrating the database'
+        );
 
-        $this->newLine(2);
-        $this->info('Pterodactyl has been reverted to default and updated to the latest version');
-    }
+        $progress->advance();
 
-    protected function withProgress(ProgressBar $bar, \Closure $callback)
-    {
-        $bar->clear();
-        $callback();
-        $bar->advance();
-        $bar->display();
+        $basePath = base_path();
+        spin(
+            fn() => exec("chown -R {$user}:{$group} {$basePath}/*"),
+            'Setting correct permissions'
+        );
+
+        $progress->advance();
+
+        spin(
+            fn() => exec('php artisan queue:restart'),
+            'Restarting queue worker'
+        );
+
+        $progress->finish();
+
+        info('Pterodactyl has been reverted to default and updated to the latest version');
+        return;
     }
 }
