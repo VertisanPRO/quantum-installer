@@ -142,11 +142,7 @@ class QuantumInstaller extends Command
         $progress->start();
 
         spin(
-            function ($response) {
-                exec("curl -s -L -o quantum.zip {$response['download_url']}");
-                exec("unzip -o quantum.zip");
-                exec("rm -rf quantum.zip");
-            },
+            fn() => $this->getQuantum($response),
             'Downloading latest stable version for Pterodactyl'
         );
 
@@ -216,5 +212,13 @@ class QuantumInstaller extends Command
         }
 
         return parse_url(config('app.url'), PHP_URL_HOST);
+    }
+
+
+    private function getQuantum($response)
+    {
+        exec("curl -s -L -o quantum.zip {$response['download_url']}");
+        exec("unzip -o quantum.zip");
+        exec("rm -rf quantum.zip");
     }
 }
