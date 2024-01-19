@@ -73,14 +73,16 @@ class QuantumUninstaller extends Command
                 $user = text('Please enter the name of the group running your webserver process');
         }
 
-        $confirm = confirm(
-            label: 'You are about to uninstall Quantum. This process will removes all third party changes and updates Pterodactyl to the latest available version. Are you sure you want to continue?',
-            default: false,
-        );
+        if (!$this->option('force')) {
+            $confirm = confirm(
+                label: 'You are about to uninstall Quantum. This process will removes all third party changes and updates Pterodactyl to the latest available version, do you wish to continue?',
+                default: false,
+            );
 
-        if (!$this->option('force') && !$confirm) {
-            warning('Uninstallation has been cancelled');
-            return;
+            if (!$confirm) {
+                warning('Uninstallation has been cancelled');
+                return;
+            }
         }
 
         $progress = progress(label: 'Uninstalling Quantum', steps: 5);
@@ -90,7 +92,6 @@ class QuantumUninstaller extends Command
             fn() => exec('curl -s -L https://github.com/pterodactyl/panel/releases/latest/download/panel.tar.gz | tar -xzv'),
             'Downloading latest stable version for Pterodactyl'
         );
-
 
         usleep(800);
 
