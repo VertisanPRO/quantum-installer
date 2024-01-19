@@ -81,9 +81,6 @@ class QuantumBuilding extends Command
             system('yarn && yarn build:production');
         }
 
-        if ($code === 0)
-            return 0;
-
-        return 1;
+        return;
     }
 }

@@ -140,6 +140,8 @@ class QuantumUninstaller extends Command
 
         $progress->finish();
 
+        exec('php artisan up');
+
         info('Pterodactyl has been reverted to default and updated to the latest version');
         return;
     }

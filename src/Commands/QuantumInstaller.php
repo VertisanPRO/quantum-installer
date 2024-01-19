@@ -177,14 +177,14 @@ class QuantumInstaller extends Command
 
         $progress->advance();
 
-        spin(
-            fn() => Artisan::call('quantum:build --no-copyright'),
-            'Building Assets (This can take a few minutes)'
-        );
+        info('Building Assets (This can take a few minutes)');
+        Artisan::call('quantum:build --no-copyright');
 
         $progress->advance();
 
-        info('Installation Complete');
+        exec('php artisan up');
+
+        info('Installation of Quantum has been complete. Please check if there are any errors');
     }
 
     private function ip()
