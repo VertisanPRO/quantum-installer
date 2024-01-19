@@ -39,7 +39,7 @@ class QuantumBuilding extends Command
         {
             $output = null;
             $code = null;
-            exec("rpm -q $packageName", $output, $code);
+            exec("rpm -q $packageName 2>/dev/null", $output, $code);
 
             return ($code === 0);
         }
@@ -52,7 +52,7 @@ class QuantumBuilding extends Command
 
         $output = null;
         $code = null;
-        exec('node -v', $output, $code);
+        exec('node -v 2>/dev/null', $output, $code);
 
         if ($code === 0) {
             if (version_compare(trim($output[0]), 'v17', '>'))
@@ -72,7 +72,7 @@ class QuantumBuilding extends Command
 
         $output = null;
         $code = null;
-        exec('yarn --version', $output, $code);
+        exec('yarn --version 2>/dev/null', $output, $code);
 
         if ($code === 0) {
             system('yarn && yarn build:production');
