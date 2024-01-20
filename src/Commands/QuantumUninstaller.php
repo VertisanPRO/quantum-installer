@@ -28,52 +28,52 @@ class QuantumUninstaller extends Command
         $userDetails = posix_getpwuid(fileowner('public'));
         $user = $userDetails['name'] ?? 'www-data';
 
-        $confirm = confirm(
-            label: "Your webserver user has been detected as <fg=green>[{$user}]:</> is this correct?",
-            default: true,
-        );
-
-        if (!$confirm) {
-            $user = select(
-                label: 'Please enter the name of the user running your webserver process. This varies from system to system, but is generally "www-data", "nginx", or "apache".',
-                options: [
-                    'www-data' => 'www-data',
-                    'nginx' => 'nginx',
-                    'apache' => 'apache',
-                    'own' => 'Your own user (type after you choose this)'
-                ],
-                default: 'www-data'
-            );
-
-            if ($user === 'own')
-                $user = text('Please enter the name of the user running your webserver process');
-        }
-
         $groupDetails = posix_getgrgid(filegroup('public'));
         $group = $groupDetails['name'] ?? 'www-data';
 
-        $confirm = confirm(
-            label: "Your webserver group has been detected as <fg=green>[{$group}]:</> is this correct?",
-            default: true,
-        );
-
-        if (!$confirm) {
-            $user = select(
-                label: 'Please enter the name of the group running your webserver process. Normally this is the same as your user.',
-                options: [
-                    'www-data' => 'www-data',
-                    'nginx' => 'nginx',
-                    'apache' => 'apache',
-                    'own' => 'Your own group (type after you choose this)'
-                ],
-                default: 'www-data'
-            );
-
-            if ($user === 'own')
-                $user = text('Please enter the name of the group running your webserver process');
-        }
-
         if (!$this->option('force')) {
+            $confirm = confirm(
+                label: "Your webserver user has been detected as <fg=green>[{$user}]:</> is this correct?",
+                default: true,
+            );
+    
+            if (!$confirm) {
+                $user = select(
+                    label: 'Please enter the name of the user running your webserver process. This varies from system to system, but is generally "www-data", "nginx", or "apache".',
+                    options: [
+                        'www-data' => 'www-data',
+                        'nginx' => 'nginx',
+                        'apache' => 'apache',
+                        'own' => 'Your own user (type after you choose this)'
+                    ],
+                    default: 'www-data'
+                );
+    
+                if ($user === 'own')
+                    $user = text('Please enter the name of the user running your webserver process');
+            }
+
+            $confirm = confirm(
+                label: "Your webserver group has been detected as <fg=green>[{$group}]:</> is this correct?",
+                default: true,
+            );
+    
+            if (!$confirm) {
+                $group = select(
+                    label: 'Please enter the name of the group running your webserver process. Normally this is the same as your user.',
+                    options: [
+                        'www-data' => 'www-data',
+                        'nginx' => 'nginx',
+                        'apache' => 'apache',
+                        'own' => 'Your own group (type after you choose this)'
+                    ],
+                    default: 'www-data'
+                );
+    
+                if ($group === 'own')
+                    $group = text('Please enter the name of the group running your webserver process');
+            }
+
             $confirm = confirm(
                 label: 'You are about to uninstall Quantum. This process will removes all third party changes and updates Pterodactyl to the latest available version, do you wish to continue?',
                 default: false,
