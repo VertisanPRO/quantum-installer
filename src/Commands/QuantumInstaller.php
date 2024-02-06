@@ -111,7 +111,7 @@ class QuantumInstaller extends Command
         );
 
         if (!$confirm) {
-            $user = select(
+            $group = select(
                 label: 'Please enter the name of the group running your webserver process. Normally this is the same as your user.',
                 options: [
                     'www-data' => 'www-data',
@@ -122,8 +122,8 @@ class QuantumInstaller extends Command
                 default: 'www-data'
             );
 
-            if ($user === 'own')
-                $user = text('Please enter the name of the group running your webserver process');
+            if ($group === 'own')
+                $group = text('Please enter the name of the group running your webserver process');
         }
 
         if (!$this->option('force')) {
